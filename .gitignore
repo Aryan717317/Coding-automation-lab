@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+ENV/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and generated project output
+logs/
+*.log
+CodingAutomationProjects/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
