@@ -57,14 +57,17 @@ def create_project(folder, name, files):
     return target
 
 
-def generate_ai_project(brief, api_key, model="openai/gpt-oss-120b"):
+def generate_ai_project(
+    brief,
+    api_key,
+    model="openai/gpt-oss-120b",
+    max_completion_tokens=32768,
+):
     """
-    Generate a project with Groq Structured Outputs.
+    Generate a project using Groq Structured Outputs.
 
-    The model returns files as an array of {path, content} records instead
-    of an object with arbitrary keys. Strict JSON Schema prevents malformed
-    JSON (for example, broken quotes or Windows backslash escapes) from
-    reaching the application.
+    Uses a larger completion budget and low reasoning effort so code-heavy
+    project generation is less likely to stop before the JSON document closes.
     """
     try:
         from groq import Groq
@@ -91,71 +94,3 @@ def generate_ai_project(brief, api_key, model="openai/gpt-oss-120b"):
             },
         },
         "required": ["project_name", "files"],
-        "additionalProperties": False,
-    }
-
-    client = Groq(api_key=api_key)
-    response = client.chat.completions.create(
-        model=model,
-        temperature=0.2,
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "name": "generated_project",
-                "strict": True,
-                "schema": schema,
-            },
-        },
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a software project generator. Return a complete small "
-                    "educational project as structured data. Each file must be a "
-                    "separate item with a relative path and complete text content. "
-                    "Use real newlines inside file content. Do not put Markdown "
-                    "fences around file contents. Do not use absolute paths, '..' "
-                    "path segments, secrets, or destructive commands. Include a "
-                    "README and a runnable entry point where appropriate."
-                ),
-            },
-            {"role": "user", "content": brief},
-        ],
-    )
-
-    raw = response.choices[0].message.content or ""
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            "Groq returned a response that could not be parsed as JSON. "
-            "Try again or choose another Groq model."
-        ) from exc
-
-    project_name = data.get("project_name")
-    file_records = data.get("files")
-
-    if not isinstance(project_name, str) or not project_name.strip():
-        raise ValueError("Groq response did not include a valid project_name.")
-    if not isinstance(file_records, list) or not file_records:
-        raise ValueError("Groq response did not include a non-empty files array.")
-
-    files = {}
-    for record in file_records:
-        if not isinstance(record, dict):
-            raise ValueError("Groq returned an invalid file record.")
-        relative_path = record.get("path")
-        content = record.get("content")
-        if not isinstance(relative_path, str) or not relative_path.strip():
-            raise ValueError("Groq returned a file with an invalid path.")
-        if not isinstance(content, str):
-            raise ValueError(f"Groq returned invalid content for {relative_path!r}.")
-        relative = Path(relative_path)
-        if relative.is_absolute() or ".." in relative.parts:
-            raise ValueError(f"Groq returned an unsafe project path: {relative_path}")
-        if relative_path in files:
-            raise ValueError(f"Groq returned a duplicate file path: {relative_path}")
-        files[relative_path] = content
-
-    return {"project_name": project_name.strip(), "files": files}
-
